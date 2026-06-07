@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>加密货币订单簿 3D 可视化</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>📊 加密货币订单簿 3D 可视化</h1>
+      <div class="status-bar">
+        <div class="status-item">
+          <span class="label">交易对:</span>
+          <span id="symbol" class="value">BTCUSDT</span>
+        </div>
+        <div class="status-item">
+          <span class="label">当前价格:</span>
+          <span id="midPrice" class="value price">--</span>
+        </div>
+        <div class="status-item">
+          <span class="label">价差:</span>
+          <span id="spread" class="value">--</span>
+        </div>
+        <div class="status-item">
+          <span class="label">连接状态:</span>
+          <span id="connectionStatus" class="value status-disconnected">未连接</span>
+        </div>
+        <div class="status-item">
+          <span class="label">异常数:</span>
+          <span id="anomalyCount" class="value">0</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="canvas-container">
+        <canvas id="threeCanvas"></canvas>
+        <div class="axes-labels">
+          <div class="axis-label x-label">价格 (X)</div>
+          <div class="axis-label y-label">数量 (Y)</div>
+          <div class="axis-label z-label">买卖方向 (Z)</div>
+        </div>
+        <div class="legend">
+          <div class="legend-item">
+            <span class="legend-color bid"></span>
+            <span>买单 (Bids)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-color ask"></span>
+            <span>卖单 (Asks)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-color anomaly-warning"></span>
+            <span>异常单 (Warning)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-color anomaly-critical"></span>
+            <span>异常单 (Critical)</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h2>📈 深度统计</h2>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">买1价</div>
+              <div id="bestBid" class="stat-value bid-color">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">卖1价</div>
+              <div id="bestAsk" class="stat-value ask-color">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">买单总量</div>
+              <div id="totalBidQty" class="stat-value">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">卖单总量</div>
+              <div id="totalAskQty" class="stat-value">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Z-score均值</div>
+              <div id="zMean" class="stat-value">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Z-score标准差</div>
+              <div id="zStd" class="stat-value">--</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>⏱️ 时间轴回放</h2>
+          <div class="timeline-controls">
+            <button id="playBtn" class="btn">▶️ 播放</button>
+            <button id="pauseBtn" class="btn" disabled>⏸️ 暂停</button>
+            <button id="liveBtn" class="btn btn-primary">🔴 实时</button>
+          </div>
+          <div class="timeline-container">
+            <input type="range" id="timelineSlider" min="0" max="100" value="100" class="slider">
+            <div class="timeline-info">
+              <span id="startTime">--</span>
+              <span id="currentTime">实时</span>
+              <span id="endTime">--</span>
+            </div>
+          </div>
+          <div class="speed-control">
+            <label>回放速度:</label>
+            <select id="speedSelect" class="select">
+              <option value="0.25">0.25x</option>
+              <option value="0.5">0.5x</option>
+              <option value="1" selected>1x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>⚠️ 异常警报</h2>
+          <div id="anomalyList" class="anomaly-list">
+            <div class="empty-state">暂无异常</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>🔧 控制</h2>
+          <div class="control-group">
+            <label>
+              <input type="checkbox" id="showAnomalies" checked>
+              显示异常标记
+            </label>
+          </div>
+          <div class="control-group">
+            <label>
+              <input type="checkbox" id="showAxes" checked>
+              显示坐标轴
+            </label>
+          </div>
+          <div class="control-group">
+            <label>
+              <input type="checkbox" id="autoRotate">
+              自动旋转
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Z-score 阈值:</label>
+            <input type="range" id="thresholdSlider" min="1" max="5" step="0.5" value="3" class="slider">
+            <span id="thresholdValue">3.0</span>
+          </div>
+          <button id="resetCameraBtn" class="btn">🎥 重置视角</button>
+        </div>
+
+        <div class="panel exchange-panel">
+          <h2>🏦 交易所</h2>
+          <div class="exchange-status">
+            <div class="exchange-item">
+              <span class="exchange-name">Binance</span>
+              <span id="binanceStatus" class="exchange-status-indicator status-disconnected">●</span>
+            </div>
+            <div class="exchange-item">
+              <span class="exchange-name">OKX</span>
+              <span id="okxStatus" class="exchange-status-indicator status-disconnected">●</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
