@@ -1,7 +1,9 @@
 const config = require('../config');
+const seqIdManager = require('../seqIdManager');
 
 let sharedBasePrice = 65000 + Math.random() * 5000;
 let lastPriceUpdate = Date.now();
+const seqIdCounters = { binance: 0, okx: 0 };
 
 class MockExchangeClient {
   constructor(name = 'mock', symbol = config.symbol, depth = config.depth) {
@@ -9,6 +11,7 @@ class MockExchangeClient {
     this.symbol = symbol.toUpperCase();
     this.depth = depth;
     this.onDataCallback = null;
+    this.onSnapshotCallback = null;
     this.intervalId = null;
     this.priceVolatility = 50;
     this.quantityMean = 0.5;
@@ -16,14 +19,27 @@ class MockExchangeClient {
     this.anomalyChance = 0.05;
     this.largeOrderChance = 0.02;
     this.priceOffset = name === 'binance' ? -Math.random() * 2 : Math.random() * 2;
+    this.snapshotSent = false;
+    this.lastSeqId = 0;
   }
 
   connect() {
     console.log(`[${this.name}] Mock exchange connected`);
     
+    seqIdManager.init(this.name);
+    this.snapshotSent = false;
+    this.lastSeqId = 0;
+    seqIdCounters[this.name] = 0;
+
+    setTimeout(() => {
+      this.sendSnapshot();
+    }, 100);
+
     this.intervalId = setInterval(() => {
+      if (!this.snapshotSent) return;
+      
       const data = this.generateOrderbook();
-      if (this.onDataCallback) {
+      if (data && this.onDataCallback) {
         this.onDataCallback(this.name, data);
       }
     }, 100);
@@ -33,7 +49,26 @@ class MockExchangeClient {
     }, 500);
   }
 
-  generateOrderbook() {
+  sendSnapshot() {
+    const data = this.generateOrderbook(true);
+    if (data) {
+      seqIdManager.setSnapshot(this.name, data);
+      this.snapshotSent = true;
+      this.lastSeqId = data.lastUpdateId;
+      
+      console.log(`[${this.name}] Mock snapshot sent, seqId: ${data.lastUpdateId}`);
+      
+      if (this.onSnapshotCallback) {
+        this.onSnapshotCallback(this.name, data);
+      }
+      
+      if (this.onDataCallback) {
+        this.onDataCallback(this.name, data);
+      }
+    }
+  }
+
+  generateOrderbook(isSnapshot = false) {
     const now = Date.now();
     if (now - lastPriceUpdate > 100) {
       sharedBasePrice += (Math.random() - 0.5) * this.priceVolatility * 0.1;
@@ -66,10 +101,24 @@ class MockExchangeClient {
     bids.sort((a, b) => b[0] - a[0]);
     asks.sort((a, b) => a[0] - b[0]);
 
+    seqIdCounters[this.name]++;
+    const seqId = seqIdCounters[this.name];
+
+    if (!isSnapshot && !seqIdManager.validate(this.name, seqId)) {
+      return null;
+    }
+
+    if (!isSnapshot) {
+      seqIdManager.generate(this.name, seqId);
+    }
+
     return {
       exchange: this.name,
       symbol: this.symbol,
       timestamp: Date.now(),
+      lastUpdateId: seqId,
+      seqId: seqId,
+      isSnapshot: isSnapshot,
       bids: bids.slice(0, this.depth),
       asks: asks.slice(0, this.depth)
     };
@@ -86,11 +135,17 @@ class MockExchangeClient {
     this.onDataCallback = callback;
   }
 
+  onSnapshot(callback) {
+    this.onSnapshotCallback = callback;
+  }
+
   disconnect() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    this.snapshotSent = false;
+    seqIdManager.setReady(this.name, false);
     console.log(`[${this.name}] Mock exchange disconnected`);
   }
 }

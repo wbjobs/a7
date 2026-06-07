@@ -75,6 +75,30 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+app.get('/api/seqid-status', (req, res) => {
+  const status = aggregator.getSeqIdStatus();
+  res.json(status);
+});
+
+app.get('/api/consumer-group-info', async (req, res) => {
+  const info = await redisClient.getConsumerGroupInfo();
+  res.json(info || { error: 'Redis not connected' });
+});
+
+app.post('/api/ack-message', async (req, res) => {
+  const { messageId } = req.body;
+  if (!messageId) {
+    return res.status(400).json({ error: 'messageId required' });
+  }
+  const success = await redisClient.ackMessage(messageId);
+  res.json({ success, messageId });
+});
+
+app.post('/api/process-pending', async (req, res) => {
+  const messages = await redisClient.checkAndProcessPending();
+  res.json({ recovered: messages.length, messages });
+});
+
 wss.on('connection', (ws) => {
   console.log('[Server] New WebSocket client connected');
   connectedClients.add(ws);
@@ -127,6 +151,8 @@ function broadcast(type, data) {
   }
 }
 
+let pendingCheckTimer = null;
+
 async function main() {
   console.log('========================================');
   console.log('Crypto Orderbook Visualization Server');
@@ -153,24 +179,42 @@ async function main() {
     broadcast('anomalies', anomalies);
   });
 
+  aggregator.onSeqIdStatus((status) => {
+    broadcast('seqid-status', status);
+  });
+
   await aggregator.init();
+
+  if (redisConnected) {
+    pendingCheckTimer = setInterval(async () => {
+      await redisClient.checkAndProcessPending();
+    }, 60000);
+    
+    console.log('[Server] Pending message check timer started (every 60s)');
+  }
 
   server.listen(config.port, () => {
     console.log(`\n[Server] HTTP server listening on port ${config.port}`);
     console.log(`[Server] WebSocket server ready on ws://localhost:${config.port}`);
     console.log(`[Server] Monitoring ${config.symbol} across Binance and OKX`);
     console.log('\nEndpoints:');
-    console.log('  GET /api/health        - Health check');
-    console.log('  GET /api/orderbook     - Current aggregated orderbook');
-    console.log('  GET /api/anomalies     - Recent anomalies');
-    console.log('  GET /api/snapshots     - Historical snapshots');
-    console.log('  GET /api/config        - Server configuration');
+    console.log('  GET /api/health              - Health check');
+    console.log('  GET /api/orderbook           - Current aggregated orderbook');
+    console.log('  GET /api/anomalies           - Recent anomalies');
+    console.log('  GET /api/snapshots           - Historical snapshots');
+    console.log('  GET /api/seqid-status        - SeqId status');
+    console.log('  GET /api/consumer-group-info - Consumer group info');
+    console.log('  POST /api/ack-message        - Acknowledge message');
+    console.log('  POST /api/process-pending    - Process pending messages');
     console.log('\nPress Ctrl+C to stop\n');
   });
 }
 
 process.on('SIGINT', async () => {
   console.log('\n[Server] Shutting down gracefully...');
+  if (pendingCheckTimer) {
+    clearInterval(pendingCheckTimer);
+  }
   aggregator.disconnect();
   await redisClient.disconnect();
   server.close(() => {
@@ -181,6 +225,9 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n[Server] Shutting down gracefully...');
+  if (pendingCheckTimer) {
+    clearInterval(pendingCheckTimer);
+  }
   aggregator.disconnect();
   await redisClient.disconnect();
   server.close(() => {
