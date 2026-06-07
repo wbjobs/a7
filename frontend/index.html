@@ -31,6 +31,10 @@
           <span class="label">异常数:</span>
           <span id="anomalyCount" class="value">0</span>
         </div>
+        <div class="status-item">
+          <span class="label">大额订单:</span>
+          <span id="largeOrderCount" class="value">0</span>
+        </div>
       </div>
     </header>
 
@@ -58,6 +62,10 @@
           <div class="legend-item">
             <span class="legend-color anomaly-critical"></span>
             <span>异常单 (Critical)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-color prediction"></span>
+            <span>3秒预测 (Prediction)</span>
           </div>
         </div>
       </div>
@@ -128,7 +136,14 @@
         </div>
 
         <div class="panel">
-          <h2>🔧 控制</h2>
+          <h2>� 大额市价单</h2>
+          <div id="largeOrderList" class="large-order-list">
+            <div class="empty-state">暂无大额订单</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>� 控制</h2>
           <div class="control-group">
             <label>
               <input type="checkbox" id="showAnomalies" checked>
@@ -145,6 +160,12 @@
             <label>
               <input type="checkbox" id="autoRotate">
               自动旋转
+            </label>
+          </div>
+          <div class="control-group">
+            <label>
+              <input type="checkbox" id="showPrediction" checked>
+              显示3秒预测
             </label>
           </div>
           <div class="control-group">

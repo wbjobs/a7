@@ -4,6 +4,7 @@ const seqIdManager = require('../seqIdManager');
 let sharedBasePrice = 65000 + Math.random() * 5000;
 let lastPriceUpdate = Date.now();
 const seqIdCounters = { binance: 0, okx: 0 };
+let lastOrderbookData = { binance: null, okx: null };
 
 class MockExchangeClient {
   constructor(name = 'mock', symbol = config.symbol, depth = config.depth) {
@@ -80,6 +81,8 @@ class MockExchangeClient {
     const bids = [];
     const asks = [];
 
+    const lastData = lastOrderbookData[this.name];
+
     for (let i = 0; i < this.depth; i++) {
       const bidPrice = effectiveBasePrice - (i + 1) * (5 + Math.random() * 10);
       const askPrice = effectiveBasePrice + (i + 1) * (5 + Math.random() * 10);
@@ -94,12 +97,31 @@ class MockExchangeClient {
         askQty *= 10 + Math.random() * 20;
       }
 
+      if (!isSnapshot && lastData && Math.random() < 0.03) {
+        const priceKey = Number(bidPrice.toFixed(2));
+        const lastBid = lastData.bids.find(b => Math.abs(b[0] - priceKey) < 1);
+        if (lastBid && lastBid[1] > 0.5) {
+          bidQty = lastBid[1] * (0.1 + Math.random() * 0.3);
+        }
+      }
+      if (!isSnapshot && lastData && Math.random() < 0.03) {
+        const priceKey = Number(askPrice.toFixed(2));
+        const lastAsk = lastData.asks.find(a => Math.abs(a[0] - priceKey) < 1);
+        if (lastAsk && lastAsk[1] > 0.5) {
+          askQty = lastAsk[1] * (0.1 + Math.random() * 0.3);
+        }
+      }
+
       bids.push([Number(bidPrice.toFixed(2)), Number(bidQty.toFixed(4))]);
       asks.push([Number(askPrice.toFixed(2)), Number(askQty.toFixed(4))]);
     }
 
     bids.sort((a, b) => b[0] - a[0]);
     asks.sort((a, b) => a[0] - b[0]);
+
+    if (!isSnapshot) {
+      lastOrderbookData[this.name] = { bids, asks };
+    }
 
     seqIdCounters[this.name]++;
     const seqId = seqIdCounters[this.name];

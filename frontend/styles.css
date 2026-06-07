@@ -160,6 +160,12 @@ body {
   background: linear-gradient(135deg, #ec4899, #be185d);
 }
 
+.legend-color.prediction {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  opacity: 0.6;
+  border: 2px dashed #8b5cf6;
+}
+
 .sidebar {
   width: 380px;
   background: rgba(0, 0, 0, 0.8);
@@ -391,6 +397,73 @@ body {
 }
 
 .anomaly-details {
+  color: #aaa;
+  font-size: 0.8rem;
+}
+
+.large-order-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.large-order-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.large-order-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.large-order-item {
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  animation: slideIn 0.3s ease-out;
+}
+
+.large-order-item.warning {
+  background: rgba(245, 158, 11, 0.2);
+  border-left: 3px solid #f59e0b;
+}
+
+.large-order-item.critical {
+  background: rgba(236, 72, 153, 0.2);
+  border-left: 3px solid #ec4899;
+}
+
+.large-order-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.large-order-type {
+  font-weight: 600;
+}
+
+.large-order-type.bid {
+  color: #10b981;
+}
+
+.large-order-type.ask {
+  color: #ef4444;
+}
+
+.large-order-impact {
+  font-weight: 600;
+}
+
+.large-order-impact.warning {
+  color: #f59e0b;
+}
+
+.large-order-impact.critical {
+  color: #ec4899;
+}
+
+.large-order-details {
   color: #aaa;
   font-size: 0.8rem;
 }

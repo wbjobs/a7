@@ -17,7 +17,9 @@ app.use(express.json());
 const aggregator = new OrderbookAggregator();
 let connectedClients = new Set();
 let recentAnomalies = [];
+let recentLargeOrders = [];
 const MAX_ANOMALIES_HISTORY = 100;
+const MAX_LARGE_ORDERS_HISTORY = 50;
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -36,6 +38,16 @@ app.get('/api/orderbook', (req, res) => {
 app.get('/api/anomalies', (req, res) => {
   const count = parseInt(req.query.count || '50', 10);
   res.json(recentAnomalies.slice(-count));
+});
+
+app.get('/api/large-orders', (req, res) => {
+  const count = parseInt(req.query.count || '20', 10);
+  res.json(recentLargeOrders.slice(-count));
+});
+
+app.get('/api/prediction', (req, res) => {
+  const prediction = aggregator.getCurrentPrediction();
+  res.json(prediction || {});
 });
 
 app.get('/api/anomaly-stats', (req, res) => {
@@ -179,6 +191,22 @@ async function main() {
     broadcast('anomalies', anomalies);
   });
 
+  aggregator.onLargeOrder((largeOrders) => {
+    console.log(`[Server] Detected ${largeOrders.length} large market orders`);
+    
+    recentLargeOrders.push(...largeOrders);
+    if (recentLargeOrders.length > MAX_LARGE_ORDERS_HISTORY) {
+      recentLargeOrders = recentLargeOrders.slice(-MAX_LARGE_ORDERS_HISTORY);
+    }
+    
+    broadcast('large-orders', largeOrders);
+  });
+
+  aggregator.onPrediction((prediction) => {
+    console.log(`[Server] Generated depth prediction for ${prediction.predictionWindow}ms window`);
+    broadcast('prediction', prediction);
+  });
+
   aggregator.onSeqIdStatus((status) => {
     broadcast('seqid-status', status);
   });
@@ -198,15 +226,23 @@ async function main() {
     console.log(`[Server] WebSocket server ready on ws://localhost:${config.port}`);
     console.log(`[Server] Monitoring ${config.symbol} across Binance and OKX`);
     console.log('\nEndpoints:');
-    console.log('  GET /api/health              - Health check');
-    console.log('  GET /api/orderbook           - Current aggregated orderbook');
-    console.log('  GET /api/anomalies           - Recent anomalies');
-    console.log('  GET /api/snapshots           - Historical snapshots');
-    console.log('  GET /api/seqid-status        - SeqId status');
-    console.log('  GET /api/consumer-group-info - Consumer group info');
-    console.log('  POST /api/ack-message        - Acknowledge message');
-    console.log('  POST /api/process-pending    - Process pending messages');
-    console.log('\nPress Ctrl+C to stop\n');
+  console.log('  GET /api/health              - Health check');
+  console.log('  GET /api/orderbook           - Current aggregated orderbook');
+  console.log('  GET /api/anomalies           - Recent anomalies');
+  console.log('  GET /api/large-orders        - Recent large market orders');
+  console.log('  GET /api/prediction          - Depth prediction (3s)');
+  console.log('  GET /api/snapshots           - Historical snapshots');
+  console.log('  GET /api/seqid-status        - SeqId status');
+  console.log('  GET /api/consumer-group-info - Consumer group info');
+  console.log('  POST /api/ack-message        - Acknowledge message');
+  console.log('  POST /api/process-pending    - Process pending messages');
+  console.log('\nWebSocket messages:');
+  console.log('  orderbook                    - Real-time orderbook data');
+  console.log('  anomalies                    - Anomaly alerts');
+  console.log('  large-orders                 - Large market order events');
+  console.log('  prediction                   - Depth prediction data');
+  console.log('  seqid-status                 - SeqID status updates');
+  console.log('\nPress Ctrl+C to stop\n');
   });
 }
 

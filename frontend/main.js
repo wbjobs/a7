@@ -8,7 +8,9 @@ class App {
     this.wsClient = null;
     this.timelinePlayer = null;
     this.currentAnomalies = [];
+    this.currentLargeOrders = [];
     this.maxAnomaliesDisplay = 20;
+    this.maxLargeOrdersDisplay = 20;
     this.exchangeStatus = { binance: false, okx: false };
     
     this.init();
@@ -50,6 +52,17 @@ class App {
       this.updateAnomalyList(anomalies);
       this.visualizer.updateAnomalies(this.currentAnomalies.slice(-this.maxAnomaliesDisplay));
       this.updateAnomalyCount();
+    });
+
+    this.wsClient.onLargeOrders((largeOrders) => {
+      this.currentLargeOrders = [...this.currentLargeOrders, ...largeOrders].slice(-this.maxLargeOrdersDisplay * 2);
+      this.updateLargeOrderList(largeOrders);
+      this.visualizer.triggerLargeOrderParticles(largeOrders);
+      this.updateLargeOrderCount();
+    });
+
+    this.wsClient.onPrediction((prediction) => {
+      this.visualizer.updatePrediction(prediction);
     });
 
     this.wsClient.onConnectionChange((connected) => {
@@ -127,6 +140,10 @@ class App {
 
     document.getElementById('resetCameraBtn').addEventListener('click', () => {
       this.visualizer.resetCamera();
+    });
+
+    document.getElementById('showPrediction').addEventListener('change', (e) => {
+      this.visualizer.setShowPrediction(e.target.checked);
     });
   }
 
@@ -242,6 +259,57 @@ class App {
 
   updateAnomalyCount() {
     document.getElementById('anomalyCount').textContent = this.currentAnomalies.length;
+  }
+
+  updateLargeOrderList(newLargeOrders) {
+    const listEl = document.getElementById('largeOrderList');
+    
+    if (newLargeOrders.length === 0 && listEl.querySelector('.empty-state')) {
+      return;
+    }
+
+    if (listEl.querySelector('.empty-state')) {
+      listEl.innerHTML = '';
+    }
+
+    for (const largeOrder of newLargeOrders.slice().reverse()) {
+      const itemEl = this.createLargeOrderItem(largeOrder);
+      listEl.insertBefore(itemEl, listEl.firstChild);
+    }
+
+    const items = listEl.querySelectorAll('.large-order-item');
+    if (items.length > this.maxLargeOrdersDisplay) {
+      for (let i = this.maxLargeOrdersDisplay; i < items.length; i++) {
+        items[i].remove();
+      }
+    }
+  }
+
+  createLargeOrderItem(largeOrder) {
+    const div = document.createElement('div');
+    div.className = `large-order-item ${largeOrder.severity}`;
+    
+    const typeText = largeOrder.type === 'large_market_buy' ? '大额买单' : '大额卖单';
+    const typeClass = largeOrder.type === 'large_market_buy' ? 'bid' : 'ask';
+    const severityClass = largeOrder.severity;
+    
+    const time = new Date(largeOrder.timestamp).toLocaleTimeString();
+    
+    div.innerHTML = `
+      <div class="large-order-header">
+        <span class="large-order-type ${typeClass}">${typeText}</span>
+        <span class="large-order-impact ${severityClass}">冲击: ${(largeOrder.impact * 100).toFixed(1)}%</span>
+      </div>
+      <div class="large-order-details">
+        价格: $${largeOrder.price.toLocaleString()} | 数量: ${largeOrder.quantity.toFixed(4)} | ${time}
+      </div>
+    `;
+    
+    return div;
+  }
+
+  updateLargeOrderCount() {
+    document.getElementById('largeOrderCount').textContent = this.currentLargeOrders.length;
   }
 
   updateTimelineUI(info) {

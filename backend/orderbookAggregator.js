@@ -2,6 +2,7 @@ const BinanceClient = require('./exchanges/binance');
 const OKXClient = require('./exchanges/okx');
 const MockExchangeClient = require('./exchanges/mockExchange');
 const AnomalyDetector = require('./anomalyDetector');
+const DepthPredictor = require('./depthPredictor');
 const seqIdManager = require('./seqIdManager');
 const config = require('./config');
 
@@ -13,11 +14,17 @@ class OrderbookAggregator {
       okx: { bids: [], asks: [], seqId: -1, ready: false }
     };
     this.aggregatedOrderbook = { bids: [], asks: [] };
-    this.anomalyDetector = new AnomalyDetector(config.zScoreThreshold);
+    this.anomalyDetector = new AnomalyDetector(config.zScoreThreshold, 50, 1.0);
+    this.depthPredictor = new DepthPredictor(3000, 30);
+    this.currentPrediction = null;
     this.onSnapshotCallback = null;
     this.onAnomalyCallback = null;
+    this.onLargeOrderCallback = null;
+    this.onPredictionCallback = null;
     this.onSeqIdStatusCallback = null;
     this.lastSnapshotTime = 0;
+    this.lastPredictionTime = 0;
+    this.predictionInterval = 500;
     this.snapshotTimer = null;
     this.fallbackTimeout = null;
     this.usingMockData = false;
@@ -278,7 +285,21 @@ class OrderbookAggregator {
       this.onAnomalyCallback(allAnomalies);
     }
 
-    return allAnomalies;
+    const largeOrders = this.anomalyDetector.detectLargeMarketOrders(this.aggregatedOrderbook);
+    if (largeOrders.length > 0 && this.onLargeOrderCallback) {
+      this.onLargeOrderCallback(largeOrders);
+    }
+
+    const now = Date.now();
+    if (now - this.lastPredictionTime >= this.predictionInterval) {
+      this.currentPrediction = this.depthPredictor.predictAggregatedDepth(this.aggregatedOrderbook);
+      if (this.currentPrediction && this.onPredictionCallback) {
+        this.onPredictionCallback(this.currentPrediction);
+      }
+      this.lastPredictionTime = now;
+    }
+
+    return { anomalies: allAnomalies, largeOrders };
   }
 
   notifySeqIdStatus() {
@@ -331,6 +352,22 @@ class OrderbookAggregator {
 
   onSeqIdStatus(callback) {
     this.onSeqIdStatusCallback = callback;
+  }
+
+  onLargeOrder(callback) {
+    this.onLargeOrderCallback = callback;
+  }
+
+  onPrediction(callback) {
+    this.onPredictionCallback = callback;
+  }
+
+  getCurrentPrediction() {
+    return this.currentPrediction;
+  }
+
+  getLargeOrderHistory(count = 20) {
+    return this.anomalyDetector.getLargeOrderHistory(count);
   }
 
   disconnect() {

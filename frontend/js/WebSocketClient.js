@@ -7,6 +7,8 @@ class WebSocketClient {
     this.reconnectDelay = 3000;
     this.onOrderbookCallback = null;
     this.onAnomaliesCallback = null;
+    this.onLargeOrdersCallback = null;
+    this.onPredictionCallback = null;
     this.onConfigCallback = null;
     this.onConnectionChangeCallback = null;
     this.isConnected = false;
@@ -67,6 +69,18 @@ class WebSocketClient {
           this.onAnomaliesCallback(message.data);
         }
         break;
+      case 'large-orders':
+        if (this.onLargeOrdersCallback) {
+          this.onLargeOrdersCallback(message.data);
+        }
+        break;
+      case 'prediction':
+        if (this.onPredictionCallback) {
+          this.onPredictionCallback(message.data);
+        }
+        break;
+      case 'seqid-status':
+        break;
       default:
         console.log('[WS] Unknown message type:', message.type);
     }
@@ -98,6 +112,14 @@ class WebSocketClient {
 
   onConfig(callback) {
     this.onConfigCallback = callback;
+  }
+
+  onLargeOrders(callback) {
+    this.onLargeOrdersCallback = callback;
+  }
+
+  onPrediction(callback) {
+    this.onPredictionCallback = callback;
   }
 
   onConnectionChange(callback) {

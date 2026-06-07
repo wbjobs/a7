@@ -1,10 +1,13 @@
 class AnomalyDetector {
-  constructor(threshold = 3.0, windowSize = 50) {
+  constructor(threshold = 3.0, windowSize = 50, largeOrderThreshold = 2.0) {
     this.threshold = threshold;
     this.windowSize = windowSize;
+    this.largeOrderThreshold = largeOrderThreshold;
     this.quantityHistory = [];
     this.mean = 0;
     this.stdDev = 0;
+    this.lastOrderbook = null;
+    this.largeOrderEvents = [];
   }
 
   update(quantities) {
@@ -72,6 +75,81 @@ class AnomalyDetector {
       windowSize: this.windowSize,
       historyLength: this.quantityHistory.length
     };
+  }
+
+  detectLargeMarketOrders(currentOrderbook) {
+    if (!this.lastOrderbook || !currentOrderbook) {
+      this.lastOrderbook = currentOrderbook;
+      return [];
+    }
+
+    const largeOrders = [];
+    const now = Date.now();
+
+    const lastBidMap = new Map();
+    for (const bid of this.lastOrderbook.bids || []) {
+      lastBidMap.set(bid[0], bid[1]);
+    }
+
+    for (const bid of currentOrderbook.bids || []) {
+      const [price, qty] = bid;
+      const lastQty = lastBidMap.get(price) || 0;
+      const qtyChange = qty - lastQty;
+      const changeRatio = lastQty > 0 ? Math.abs(qtyChange) / lastQty : Math.abs(qtyChange);
+
+      if (qtyChange < 0 && Math.abs(qtyChange) >= this.mean * this.largeOrderThreshold) {
+        const event = {
+          type: 'large_market_buy',
+          side: 'bid',
+          price,
+          quantity: Math.abs(qtyChange),
+          totalValue: price * Math.abs(qtyChange),
+          impact: changeRatio,
+          timestamp: now,
+          severity: changeRatio > 0.5 ? 'critical' : 'warning'
+        };
+        largeOrders.push(event);
+        this.largeOrderEvents.push(event);
+      }
+    }
+
+    const lastAskMap = new Map();
+    for (const ask of this.lastOrderbook.asks || []) {
+      lastAskMap.set(ask[0], ask[1]);
+    }
+
+    for (const ask of currentOrderbook.asks || []) {
+      const [price, qty] = ask;
+      const lastQty = lastAskMap.get(price) || 0;
+      const qtyChange = qty - lastQty;
+      const changeRatio = lastQty > 0 ? Math.abs(qtyChange) / lastQty : Math.abs(qtyChange);
+
+      if (qtyChange < 0 && Math.abs(qtyChange) >= this.mean * this.largeOrderThreshold) {
+        const event = {
+          type: 'large_market_sell',
+          side: 'ask',
+          price,
+          quantity: Math.abs(qtyChange),
+          totalValue: price * Math.abs(qtyChange),
+          impact: changeRatio,
+          timestamp: now,
+          severity: changeRatio > 0.5 ? 'critical' : 'warning'
+        };
+        largeOrders.push(event);
+        this.largeOrderEvents.push(event);
+      }
+    }
+
+    if (this.largeOrderEvents.length > 100) {
+      this.largeOrderEvents = this.largeOrderEvents.slice(-100);
+    }
+
+    this.lastOrderbook = currentOrderbook;
+    return largeOrders;
+  }
+
+  getLargeOrderHistory(count = 20) {
+    return this.largeOrderEvents.slice(-count);
   }
 }
 
